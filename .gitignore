@@ -1,0 +1,6 @@
+.venv-step02/
+__pycache__/
+*.pyc
+outputs/
+logs/
+.env
