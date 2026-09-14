@@ -50,10 +50,12 @@ echo "[Step 02] Querying Materials Project for elemental bcc Fe (Im-3m)."
 python scripts/01_fetch_fe_bulk.py 2>&1 | tee "$LOG_FILE"
 
 for required in \
-  outputs/Fe_bulk_mp.cif \
+  outputs/Fe_bulk_mp_raw.cif \
+  outputs/POSCAR_Fe_bulk_mp_raw \
   outputs/POSCAR_Fe_bulk \
   outputs/Fe_bulk_conventional.cif \
-  outputs/Fe_bulk_metadata.json; do
+  outputs/Fe_bulk_metadata.json \
+  outputs/Fe_query_candidates.json; do
   if [[ ! -s "$required" ]]; then
     echo "ERROR: expected output missing or empty: $required" >&2
     exit 20
@@ -65,12 +67,25 @@ import json
 from pathlib import Path
 p = Path('outputs/Fe_bulk_metadata.json')
 meta = json.loads(p.read_text())
-if meta.get('verified_space_group') != 'Im-3m':
-    raise SystemExit(f"ERROR: expected verified Im-3m bcc Fe, got {meta.get('verified_space_group')!r}")
 if meta.get('formula') != 'Fe':
     raise SystemExit(f"ERROR: expected formula Fe, got {meta.get('formula')!r}")
-print('[Step 02] Validation PASSED: elemental bcc Fe (Im-3m) obtained from Materials Project.')
+reported = meta.get('reported_symmetry')
+if reported != 'Im-3m':
+    raise SystemExit(f"ERROR: expected MP-reported Im-3m, got {reported!r}")
+mp_diag = meta.get('raw_structure_symmetry_mp_compatible', {})
+if mp_diag.get('space_group_symbol') != 'Im-3m' or mp_diag.get('space_group_number') != 229:
+    raise SystemExit(f"ERROR: MP-compatible symmetry validation failed: {mp_diag}")
+std_diag = meta.get('standardized_structure_symmetry_strict', {})
+if std_diag.get('space_group_symbol') != 'Im-3m' or std_diag.get('space_group_number') != 229:
+    raise SystemExit(f"ERROR: standardized strict symmetry validation failed: {std_diag}")
+print('[Step 02] Validation PASSED: elemental alpha-Fe reference standardized as bcc Im-3m (229).')
 print(f"[Step 02] Materials Project ID: {meta.get('material_id')}")
+strict = meta.get('raw_structure_symmetry_strict', {})
+print(
+    '[Step 02] Raw MP structure diagnostic at symprec=1e-3 A: '
+    f"{strict.get('space_group_symbol')} ({strict.get('space_group_number')})"
+)
+print('[Step 02] Simulation reference: outputs/POSCAR_Fe_bulk')
 PY
 
 python -m pip freeze > outputs/environment_freeze.txt
