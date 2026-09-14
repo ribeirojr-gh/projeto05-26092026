@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Fetch and validate elemental bcc Fe from the Materials Project.
+"""Fetch, diagnose, standardize, and validate elemental bcc alpha-Fe.
 
-This is intentionally the first and only structural-model script in the
-initial Step 02 branch. It does not assume a Materials Project ID in advance;
-it queries the database and selects an elemental Fe entry with Im-3m symmetry.
+Materials Project reports symmetry using its production tolerance (symprec=0.1 A),
+while a much tighter tolerance can classify a numerically relaxed structure in a
+lower-symmetry setting. We therefore preserve the raw MP structure, record a
+symmetry-tolerance diagnostic, and generate a standardized conventional Im-3m
+cell only when the MP-consistent analysis confirms space group 229.
 """
 
 from __future__ import annotations
@@ -23,6 +25,10 @@ from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 OUTDIR = Path("outputs")
 OUTDIR.mkdir(parents=True, exist_ok=True)
 
+MP_SYMPREC_A = 0.1
+STRICT_SYMPREC_A = 1e-3
+ANGLE_TOL_DEG = 5
+
 
 def _symmetry_symbol(doc) -> str | None:
     sym = getattr(doc, "symmetry", None)
@@ -32,6 +38,17 @@ def _symmetry_symbol(doc) -> str | None:
         return getattr(sym, "symbol")
     if isinstance(sym, dict):
         return sym.get("symbol")
+    return None
+
+
+def _symmetry_number(doc) -> int | None:
+    sym = getattr(doc, "symmetry", None)
+    if sym is None:
+        return None
+    if hasattr(sym, "number"):
+        return getattr(sym, "number")
+    if isinstance(sym, dict):
+        return sym.get("number")
     return None
 
 
@@ -49,6 +66,34 @@ def _serialize_candidate(doc) -> dict:
         "energy_above_hull": getattr(doc, "energy_above_hull", None),
         "is_stable": getattr(doc, "is_stable", None),
         "symmetry_symbol": _symmetry_symbol(doc),
+        "symmetry_number": _symmetry_number(doc),
+    }
+
+
+def _analyze(structure, symprec: float) -> dict:
+    analyzer = SpacegroupAnalyzer(
+        structure,
+        symprec=symprec,
+        angle_tolerance=ANGLE_TOL_DEG,
+    )
+    return {
+        "symprec_A": symprec,
+        "space_group_symbol": analyzer.get_space_group_symbol(),
+        "space_group_number": analyzer.get_space_group_number(),
+    }
+
+
+def _lattice_payload(structure) -> dict:
+    lat = structure.lattice
+    return {
+        "a_A": lat.a,
+        "b_A": lat.b,
+        "c_A": lat.c,
+        "alpha_deg": lat.alpha,
+        "beta_deg": lat.beta,
+        "gamma_deg": lat.gamma,
+        "volume_A3": structure.volume,
+        "num_sites": len(structure),
     }
 
 
@@ -81,34 +126,80 @@ def main() -> int:
         print("ERROR: Materials Project query returned no elemental Fe entries.", file=sys.stderr)
         return 3
 
-    bcc_candidates = [d for d in elemental_fe if _symmetry_symbol(d) == "Im-3m"]
+    bcc_candidates = [
+        d
+        for d in elemental_fe
+        if _symmetry_symbol(d) == "Im-3m" and _symmetry_number(d) in (None, 229)
+    ]
     if not bcc_candidates:
         print(
-            "ERROR: elemental Fe entries were found, but none had Im-3m symmetry. "
-            "See outputs/Fe_query_candidates.json.",
+            "ERROR: elemental Fe entries were found, but none were reported by "
+            "Materials Project as Im-3m. See outputs/Fe_query_candidates.json.",
             file=sys.stderr,
         )
         return 4
 
-    selected = min(bcc_candidates, key=_energy_above_hull)
-    structure = selected.structure
+    # Prefer a stable entry, then the lowest energy above hull. No MP-ID is
+    # hard-coded; the selected ID is recorded for provenance.
+    selected = min(
+        bcc_candidates,
+        key=lambda d: (
+            not bool(getattr(d, "is_stable", False)),
+            _energy_above_hull(d),
+            str(getattr(d, "material_id", "")),
+        ),
+    )
+    raw_structure = selected.structure
 
-    analyzer = SpacegroupAnalyzer(structure, symprec=1e-3, angle_tolerance=5)
-    verified_symbol = analyzer.get_space_group_symbol()
-    verified_number = analyzer.get_space_group_number()
+    strict_diag = _analyze(raw_structure, STRICT_SYMPREC_A)
+    mp_diag = _analyze(raw_structure, MP_SYMPREC_A)
 
-    if verified_symbol != "Im-3m":
+    print(
+        "Symmetry diagnostic: "
+        f"symprec={STRICT_SYMPREC_A:g} A -> {strict_diag['space_group_symbol']} "
+        f"({strict_diag['space_group_number']}); "
+        f"symprec={MP_SYMPREC_A:g} A -> {mp_diag['space_group_symbol']} "
+        f"({mp_diag['space_group_number']})."
+    )
+
+    if not (
+        mp_diag["space_group_symbol"] == "Im-3m"
+        and mp_diag["space_group_number"] == 229
+    ):
         print(
-            f"ERROR: pymatgen independently identified {verified_symbol} instead of Im-3m.",
+            "ERROR: the selected MP structure does not recover Im-3m (229) at "
+            f"the Materials Project-compatible symmetry tolerance ({MP_SYMPREC_A} A).",
             file=sys.stderr,
         )
         return 5
 
-    conventional = analyzer.get_conventional_standard_structure()
+    mp_analyzer = SpacegroupAnalyzer(
+        raw_structure,
+        symprec=MP_SYMPREC_A,
+        angle_tolerance=ANGLE_TOL_DEG,
+    )
+    conventional = mp_analyzer.get_conventional_standard_structure()
 
-    CifWriter(structure).write_file(OUTDIR / "Fe_bulk_mp.cif")
-    Poscar(structure).write_file(OUTDIR / "POSCAR_Fe_bulk")
+    # The standardized structure is the simulation reference. It must recover
+    # the target symmetry even with the stricter local diagnostic.
+    standardized_diag = _analyze(conventional, STRICT_SYMPREC_A)
+    if not (
+        standardized_diag["space_group_symbol"] == "Im-3m"
+        and standardized_diag["space_group_number"] == 229
+    ):
+        print(
+            "ERROR: standardized conventional structure failed strict Im-3m "
+            "validation. No simulation reference was accepted.",
+            file=sys.stderr,
+        )
+        return 6
+
+    # Preserve the raw database structure separately from the standardized
+    # simulation reference so provenance is never lost.
+    CifWriter(raw_structure).write_file(OUTDIR / "Fe_bulk_mp_raw.cif")
+    Poscar(raw_structure).write_file(OUTDIR / "POSCAR_Fe_bulk_mp_raw")
     CifWriter(conventional).write_file(OUTDIR / "Fe_bulk_conventional.cif")
+    Poscar(conventional).write_file(OUTDIR / "POSCAR_Fe_bulk")
 
     metadata = {
         "source": "Materials Project",
@@ -116,19 +207,26 @@ def main() -> int:
         "material_id": str(selected.material_id),
         "formula": selected.formula_pretty,
         "reported_symmetry": _symmetry_symbol(selected),
-        "verified_space_group": verified_symbol,
-        "verified_space_group_number": verified_number,
+        "reported_space_group_number": _symmetry_number(selected),
         "energy_above_hull_eV_per_atom": getattr(selected, "energy_above_hull", None),
         "is_stable": getattr(selected, "is_stable", None),
-        "num_sites": len(structure),
-        "lattice_a_A": structure.lattice.a,
-        "lattice_b_A": structure.lattice.b,
-        "lattice_c_A": structure.lattice.c,
-        "alpha_deg": structure.lattice.alpha,
-        "beta_deg": structure.lattice.beta,
-        "gamma_deg": structure.lattice.gamma,
-        "volume_A3": structure.volume,
-        "selection_rule": "elemental Fe; Im-3m symmetry; lowest energy_above_hull among matching Materials Project entries",
+        "raw_structure_symmetry_strict": strict_diag,
+        "raw_structure_symmetry_mp_compatible": mp_diag,
+        "standardized_structure_symmetry_strict": standardized_diag,
+        "raw_structure_lattice": _lattice_payload(raw_structure),
+        "standardized_conventional_lattice": _lattice_payload(conventional),
+        "simulation_reference": "outputs/POSCAR_Fe_bulk",
+        "provenance_reference": "outputs/POSCAR_Fe_bulk_mp_raw",
+        "selection_rule": (
+            "elemental Fe; Materials Project-reported Im-3m/229; prefer stable entry; "
+            "then lowest energy_above_hull"
+        ),
+        "symmetry_policy": (
+            "Preserve raw MP structure; diagnose at symprec=1e-3 A and at the "
+            "MP-compatible symprec=0.1 A; accept only if the latter is Im-3m/229; "
+            "standardize to a conventional Im-3m cell and revalidate that cell at "
+            "symprec=1e-3 A."
+        ),
     }
 
     (OUTDIR / "Fe_bulk_metadata.json").write_text(
@@ -138,9 +236,10 @@ def main() -> int:
     print("Selected Materials Project entry:")
     print(json.dumps(metadata, indent=2, default=str))
     print("Wrote:")
-    print("  outputs/Fe_bulk_mp.cif")
-    print("  outputs/POSCAR_Fe_bulk")
+    print("  outputs/Fe_bulk_mp_raw.cif")
+    print("  outputs/POSCAR_Fe_bulk_mp_raw")
     print("  outputs/Fe_bulk_conventional.cif")
+    print("  outputs/POSCAR_Fe_bulk")
     print("  outputs/Fe_bulk_metadata.json")
     print("  outputs/Fe_query_candidates.json")
     return 0
