@@ -2,75 +2,105 @@
 
 ## Status
 
-First validation gate only. The current branch contains one executable structural-model task: retrieve, diagnose, standardize, and validate elemental bcc alpha-Fe from the Materials Project.
+Task 01 (bulk alpha-Fe reference) has passed local validation. The current executable gate is Task 02: build and geometrically validate a candidate slab library for Fe(110), Fe(100), and Fe(111).
 
-No surfaces, oxides, hydroxides, silica models, or inhibitor structures are generated yet. Those will be added only after this first task is executed locally and reviewed.
+No surface is yet claimed to be DFT-converged. Oxides, hydroxides, silica models, inhibitor structures, and adsorption calculations remain outside the present gate.
 
-## Scientific objective of this first task
+## Task 01 — validated bulk alpha-Fe reference
 
-Establish a traceable bulk alpha-Fe reference structure for later construction of Fe(110), Fe(100), and Fe(111) slabs.
+The Materials Project query selected `mp-13`, elemental Fe, reported as `Im-3m` (space group 229), stable, with `energy_above_hull = 0.0 eV/atom`.
 
-The script queries elemental Fe entries and selects a Materials Project entry reported as `Im-3m` (space group 229), preferring a stable entry and then the lowest energy above hull. The MP-ID is not hard-coded.
+The raw relaxed database structure was intentionally preserved for provenance. It was classified as `Fmmm` (69) at the very strict local tolerance `symprec = 1e-3 Å`, but recovered `Im-3m` (229) at the Materials Project-compatible `symprec = 0.1 Å`. A conventional standardized cell was then generated and recovered `Im-3m` (229) again at `symprec = 1e-3 Å`.
+
+The accepted simulation reference is `outputs/POSCAR_Fe_bulk`, with standardized conventional lattice parameter approximately `a = 2.8630355 Å`.
 
 ### Symmetry policy
 
-The raw Materials Project structure is preserved exactly as retrieved for provenance. A very strict local symmetry analysis (`symprec = 1e-3 Å`) is recorded as a diagnostic but is not used alone to reject the structure because relaxed database cells can be represented in non-standard or slightly distorted settings.
+The raw Materials Project structure is never silently overwritten. Both the raw database structure and the standardized simulation reference are retained. The strict raw-cell lower-symmetry diagnostic is preserved in `Fe_bulk_metadata.json`.
 
-The Materials Project production pipeline uses a looser symmetry tolerance (`symprec = 0.1 Å`) for reported space-group assignments. The script therefore requires the raw structure to recover `Im-3m`/229 at `symprec = 0.1 Å`, then constructs a conventional standardized cell and requires that standardized cell to recover `Im-3m`/229 again at the stricter `symprec = 1e-3 Å`.
+## Task 02 — geometric Fe surface candidate library
 
-This preserves both provenance and a clean simulation reference without silently overwriting the raw database structure.
+### Scientific objective
+
+Construct a controlled candidate library from the validated bulk reference for:
+
+- Fe(110) — primary orientation for the first corrosion-interface calculations;
+- Fe(100) — sensitivity/comparison orientation;
+- Fe(111) — sensitivity/comparison orientation.
+
+The present task is geometric only. It generates candidate slabs at three requested layer counts (`7`, `9`, `11`) and two total periodic vacuum gaps (`15 Å`, `20 Å`) for each orientation, for a total of 18 candidates.
+
+These candidates are *not* called converged. Final slab thickness and vacuum will later be selected from explicit electronic-structure convergence calculations.
+
+### Structural checks
+
+For every candidate the script records and checks:
+
+- pure Fe composition;
+- Miller orientation requested;
+- number of atoms;
+- detected atomic layers;
+- slab thickness;
+- surface area;
+- periodic cell height normal to the surface;
+- realized total vacuum gap;
+- minimum pair distance;
+- alignment of the cell c-axis with the surface normal;
+- periodic boundary conditions in all directions;
+- absence of unphysical atomic overlap.
+
+The script stops if any candidate fails the defined geometric sanity checks.
 
 ## Requirements
 
 - Linux shell
 - Python 3 with `venv` support
-- Internet access
-- Materials Project API key available as the environment variable `MP_API_KEY`
+- `mp-api`, `pymatgen`, and `ase` from `requirements-step02.txt`
+- Materials Project API key only if the validated Task 01 outputs are absent
 
-Do not commit the API key.
+Never commit the Materials Project API key.
 
 ## Local execution
 
+Synchronize the branch first:
+
 ```bash
-export MP_API_KEY="YOUR_KEY_HERE"
+git fetch origin
+git switch step-02-structural-models
+git pull origin step-02-structural-models
 chmod +x run.sh
 ./run.sh
 ```
 
-The runner creates `.venv-step02`, installs the Python dependencies, queries Materials Project, writes both raw and standardized structure files, performs validation, and records the actual environment with `pip freeze`.
+If the validated bulk outputs already exist locally, `run.sh` reuses them and does not repeat the Materials Project query. On a fresh clone, export `MP_API_KEY` before running so Task 01 can be reconstructed automatically.
 
-## Expected outputs
+## Task 02 expected outputs
 
-Generated locally under `outputs/`:
+Generated under `outputs/surfaces/`:
 
-- `Fe_bulk_mp_raw.cif` — raw database structure for provenance
-- `POSCAR_Fe_bulk_mp_raw` — raw database structure in POSCAR format
-- `Fe_bulk_conventional.cif` — standardized conventional bcc cell
-- `POSCAR_Fe_bulk` — standardized simulation reference
-- `Fe_bulk_metadata.json` — provenance, lattice, selection rule, and symmetry diagnostics
-- `Fe_query_candidates.json` — all elemental Fe query candidates returned
-- `environment_freeze.txt`
+- POSCAR and CIF files for all 18 candidate slabs;
+- `surface_library.json` — complete machine-readable provenance and validation record;
+- `surface_library.csv` — compact tabular summary;
+- `surface_library_report.txt` — human-readable review report.
 
-A log is written to `logs/01_fetch_fe_bulk.log`.
+The run log is written to:
 
-## Validation criteria
+- `logs/02_build_fe_surfaces.log`
 
-The task must stop with an error unless:
+## Task 02 validation gate
 
-1. the retrieved composition is elemental Fe;
-2. a Materials Project candidate reported as `Im-3m`/229 exists;
-3. the raw candidate recovers `Im-3m`/229 at the Materials Project-compatible `symprec = 0.1 Å`;
-4. the standardized conventional structure recovers `Im-3m`/229 at `symprec = 1e-3 Å`;
-5. all required output files are present and non-empty.
+The task passes only if all 18 candidates are generated and all geometric checks pass. Passing this gate means only that the slab geometries are internally valid candidate models. It does not establish DFT convergence.
 
-A lower symmetry detected for the raw relaxed cell at `symprec = 1e-3 Å` is retained in the metadata as a diagnostic and is not hidden.
-
-## Review gate
-
-After execution, return the terminal output and:
+After execution, return:
 
 ```bash
-cat outputs/Fe_bulk_metadata.json
+cat outputs/surfaces/surface_library_report.txt
 ```
 
-Do not proceed to surface generation or oxide models until this result has been reviewed.
+and the file:
+
+```text
+logs/02_build_fe_surfaces.log
+```
+
+Do not proceed to DFT surface-energy convergence or oxide models until this gate has been reviewed.
