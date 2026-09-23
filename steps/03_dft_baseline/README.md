@@ -231,3 +231,41 @@ Send `outputs/fe_bulk_realized_grid_summary.json`,
 `failure.json` under its timestamped run folder and the native SIESTA
 `.out` for the failed point when present. No Fe(110) surface calculation
 or numerical convergence claim is authorized by this screening task.
+
+## Current numerical gate: Fe bulk k-point screening (script 09)
+
+The previous realized-grid study (850, 1000, 1250, 1500 Ry) produced four
+distinct SIESTA FFT grids and four converged SCF calculations. The
+energy range was 0.4885 meV/Fe and the spin moment range was
+0.000015 μB/Fe, but the static-pressure range remained 7.2747 kbar.
+See `docs/09_realized_grid_review_2026-09-23.md`. This supports using
+the **requested 1500 Ry cutoff provisionally for k-point screening**;
+it does not prove stress convergence or the equilibrium lattice.
+
+The current single script `scripts/09_fe_bulk_kpoint_screen.py` uses
+five Monkhorst–Pack meshes: 6³, 8³, 10³, 12³, 14³. The validated
+Fe semicore PSML, PBE/DZP, 0.02 Ry PAO shift, fixed two-Fe bulk geometry,
+300 K electronic temperature, +2.2 μB/Fe initial moments and 1500 Ry
+requested MeshCutoff remain fixed. The script verifies the generated FDF
+k-grid, native SCF, actual SIESTA FFT grid, energy, magnetization and
+pressure. The repeat 6³ calculation is compared against the previously
+validated 1500 Ry calculation (energy, moment, pressure). The realized
+FFT grid must stay unchanged when only k points vary.
+
+From repository root, only when local changes are accounted for:
+
+```bash
+cd ~/SIMULACOES/corrosao
+git status --short
+git fetch origin
+git switch step-03-dft-baseline
+git pull --ff-only origin step-03-dft-baseline
+SIESTA_PS_PATH="$HOME/Pacotes/PSEUDOS/DOJO-PSML" bash run.sh
+```
+
+Return `outputs/fe_bulk_kpoint_summary.json`,
+`outputs/fe_bulk_kpoint_report.txt` and
+`logs/09_fe_bulk_kpoint_screen.log`. If a calculation fails, send
+the timestamped `failure.json` and native SIESTA `.out` file if present.
+At this gate do not declare a production cutoff or k-mesh; do not
+perform lattice optimization or Fe(110) slab/adsorption calculations.
