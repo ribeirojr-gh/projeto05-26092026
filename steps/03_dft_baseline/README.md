@@ -151,3 +151,44 @@ the same fixed atomic geometry, so within-series differences are meaningful.
 Absolute energies must not be compared to different pseudopotential
 families. Differences relative to 550 Ry are a screening diagnostic only:
 **no converged cutoff is selected until after numerical review**.
+
+## Current validation target: extension from 550 to 850 Ry (script 07)
+
+The reviewed first MeshCutoff series has four successful SCF calculations at
+250, 350, 450 and 550 Ry. The total-energy span is 1.432 meV/Fe; the Fe
+moment span is 0.000085 μB/Fe, while the 450-to-550 Ry pressure changes
+by ~1.405 kbar. The total energy is nonmonotonic; 550 Ry is not yet
+designated numerically converged. See
+`docs/06_mesh_cutoff_initial_review_2026-09-23.md`.
+
+The next **single script** is `scripts/07_fe_bulk_mesh_cutoff_extension.py`.
+It holds the Fe bulk structure, Fe PSML fingerprint, PBE, DZP, 0.02 Ry
+PAO energy shift, 6×6×6 k-grid, 300 K electronic temperature,
++2.2 μB/Fe initial spin and two-MPI-rank configuration fixed,
+while scanning `MeshCutoff = [550, 650, 750, 850] Ry`.
+The repeated 550 Ry point is compared with the previous 550 Ry result
+(automatic check ≤0.5 meV/Fe in energy and ≤0.005 μB/Fe in moment).
+Each run receives a unique timestamped directory.
+
+Run from the repository root after verifying there are no local
+uncommitted changes:
+
+```bash
+cd ~/SIMULACOES/corrosao
+git status --short
+git fetch origin
+git switch step-03-dft-baseline
+git pull --ff-only origin step-03-dft-baseline
+SIESTA_PS_PATH="$HOME/Pacotes/PSEUDOS/DOJO-PSML" bash run.sh
+```
+
+Return `outputs/fe_bulk_mesh_cutoff_extension_summary.json`,
+`outputs/fe_bulk_mesh_cutoff_extension_report.txt`, and
+`logs/07_fe_bulk_mesh_cutoff_extension.log`.
+If the script reports a failure, also send the timestamped
+`screening_failure.json` and native SIESTA `.out` for the failed point.
+
+**Do not infer final numerical convergence from a finite total energy,
+small net moment drift, or the highest screened cutoff alone.**
+Pressure, k-mesh, PAO basis and equilibrium-lattice dependence must
+be reviewed before production Fe(110) calculations.
