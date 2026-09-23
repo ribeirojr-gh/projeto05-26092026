@@ -192,3 +192,42 @@ If the script reports a failure, also send the timestamped
 small net moment drift, or the highest screened cutoff alone.**
 Pressure, k-mesh, PAO basis and equilibrium-lattice dependence must
 be reviewed before production Fe(110) calculations.
+
+## Current task: audit convergence across **realized** SIESTA FFT grids (script 08)
+
+The native inputs and outputs for the previous cutoff extension were examined.
+Requested 550, 650 and 750 Ry all selected the **same actual 48×48×48 FFT
+grid**, with SIESTA reporting a used cutoff of **776.839 Ry**. Requesting
+850 Ry selected **54×54×54** at used cutoff **983.187 Ry**. Therefore
+identical energies and stresses at 550/650/750 Ry are expected: they are
+not three independent real-space resolutions. The observed ~4.982 kbar
+pressure change at 850 Ry coincides with the FFT-grid jump. There is no
+evidence from these native files that the cutoff keyword was ignored.
+See `docs/08_native_mesh_diagnostics_review_2026-09-23.md`.
+
+The current `run.sh` executes only the next script,
+`scripts/08_fe_bulk_realized_grid_screen.py`, after checking previous
+prerequisites. The fixed two-Fe PBE/DZP/6×6×6, +2.2 μB/Fe,
+300 K setup is held constant while requested cutoffs **850, 1000, 1250,
+1500 Ry** are screened. Every `.out` is parsed for native SCF status,
+energy, spin, pressure, and especially `InitMesh: MESH` and
+`InitMesh: Mesh cutoff (required, used)`. The 850 Ry point is rerun
+and compared with the prior result for energy, moment and pressure.
+
+Run after checking that the working tree is clean:
+
+```bash
+cd ~/SIMULACOES/corrosao
+git status --short
+git fetch origin
+git switch step-03-dft-baseline
+git pull --ff-only origin step-03-dft-baseline
+SIESTA_PS_PATH="$HOME/Pacotes/PSEUDOS/DOJO-PSML" bash run.sh
+```
+
+Send `outputs/fe_bulk_realized_grid_summary.json`,
+`outputs/fe_bulk_realized_grid_report.txt`, and
+`logs/08_fe_bulk_realized_grid.log`. If a run fails, include
+`failure.json` under its timestamped run folder and the native SIESTA
+`.out` for the failed point when present. No Fe(110) surface calculation
+or numerical convergence claim is authorized by this screening task.
