@@ -66,15 +66,24 @@ else
   echo "[Step 03] Reusing previously completed alpha-Fe bulk pilot."
 fi
 
-echo "[Step 03] MeshCutoff single-variable screening: 250, 350, 450, 550 Ry."
+echo "[Step 03] Prior 250–550 Ry sensitivity gate has been reviewed."
+for prior in outputs/fe_bulk_mesh_cutoff_summary.json outputs/fe_bulk_mesh_cutoff_report.txt; do
+  if [[ ! -s "$prior" ]]; then
+    echo "ERROR: prior validated MeshCutoff screening result missing: $prior" >&2
+    echo "Run the previous screening gate before this extension; no numerical result will be invented." >&2
+    exit 16
+  fi
+done
+echo "[Step 03] Extended MeshCutoff screening: 550, 650, 750, 850 Ry."
+echo "[Step 03] Repeating 550 Ry to validate reproducibility against the prior run."
 echo "[Step 03] Two MPI ranks and one thread per rank by default; no slab DFT."
-"$PYTHON_BIN" scripts/06_fe_bulk_mesh_cutoff_screen.py 2>&1 | tee logs/06_fe_bulk_mesh_cutoff.log
+"$PYTHON_BIN" scripts/07_fe_bulk_mesh_cutoff_extension.py 2>&1 | tee logs/07_fe_bulk_mesh_cutoff_extension.log
 
-for path in outputs/fe_bulk_mesh_cutoff_summary.json outputs/fe_bulk_mesh_cutoff_summary.csv outputs/fe_bulk_mesh_cutoff_report.txt logs/06_fe_bulk_mesh_cutoff.log; do
+for path in outputs/fe_bulk_mesh_cutoff_extension_summary.json outputs/fe_bulk_mesh_cutoff_extension_summary.csv outputs/fe_bulk_mesh_cutoff_extension_report.txt logs/07_fe_bulk_mesh_cutoff_extension.log; do
   if [[ ! -s "$path" ]]; then
     echo "ERROR: expected screening output missing or empty: $path" >&2
     exit 20
   fi
 done
-echo "[Step 03] MeshCutoff screening completed; no final numerical convergence was claimed."
-echo "[Step 03] Send the summary JSON, report TXT, and logs/06_fe_bulk_mesh_cutoff.log for review."
+echo "[Step 03] Extended cutoff screening completed; no final numerical convergence was claimed."
+echo "[Step 03] Return extension summary JSON, extension report TXT and logs/07_fe_bulk_mesh_cutoff_extension.log."
