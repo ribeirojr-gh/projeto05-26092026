@@ -66,22 +66,20 @@ else
   echo "[Step 03] Reusing previously completed alpha-Fe bulk pilot."
 fi
 
-echo "[Step 03] Previous 550–850 Ry study completed and native FFT-grid diagnostic reviewed."
-for source in outputs/fe_bulk_mesh_cutoff_extension_summary.json outputs/fe_bulk_mesh_cutoff_extension_report.txt; do
-  if [[ ! -s "$source" ]]; then
-    echo "ERROR: reviewed extension output missing: $source" >&2
-    exit 16
-  fi
-done
-echo "[Step 03] Screening distinct realized SIESTA grids: requests 850, 1000, 1250, 1500 Ry."
-echo "[Step 03] Repeating 850 Ry as a physical-grid reproducibility anchor."
-echo "[Step 03] MPI ranks: $SIESTA_MPI_RANKS, one OpenMP/BLAS thread per rank."
-"$PYTHON_BIN" scripts/08_fe_bulk_realized_grid_screen.py 2>&1 | tee logs/08_fe_bulk_realized_grid.log
-for output in outputs/fe_bulk_realized_grid_summary.json outputs/fe_bulk_realized_grid_summary.csv outputs/fe_bulk_realized_grid_report.txt logs/08_fe_bulk_realized_grid.log; do
-  if [[ ! -s "$output" ]]; then
-    echo "ERROR: requested grid-screening output missing or empty: $output" >&2
+echo "[Step 03] Realized FFT-grid screening reviewed: 850–1500 Ry."
+if [[ ! -s outputs/fe_bulk_realized_grid_summary.json ]]; then
+  echo "ERROR: validated realized-grid screening summary is missing." >&2
+  exit 16
+fi
+echo "[Step 03] Performing k-point screening at provisional requested MeshCutoff=1500 Ry."
+echo "[Step 03] k-point grids: 6x6x6, 8x8x8, 10x10x10, 12x12x12, 14x14x14."
+echo "[Step 03] MPI ranks: $SIESTA_MPI_RANKS; OpenMP and BLAS: 1 thread per rank."
+echo "[Step 03] No final numerical convergence, lattice relaxation or slab calculation."
+"$PYTHON_BIN" scripts/09_fe_bulk_kpoint_screen.py 2>&1 | tee logs/09_fe_bulk_kpoint_screen.log
+for result in outputs/fe_bulk_kpoint_summary.json outputs/fe_bulk_kpoint_summary.csv outputs/fe_bulk_kpoint_report.txt logs/09_fe_bulk_kpoint_screen.log; do
+  if [[ ! -s "$result" ]]; then
+    echo "ERROR: k-point screening result missing or empty: $result" >&2
     exit 20
   fi
 done
-echo "[Step 03] Realized-grid screening complete. No final numerical convergence is claimed."
-echo "[Step 03] Send outputs/fe_bulk_realized_grid_summary.json, outputs/fe_bulk_realized_grid_report.txt and logs/08_fe_bulk_realized_grid.log."
+echo "[Step 03] k-point screening finished. Return k-point summary JSON, report TXT and wrapper log for review."
