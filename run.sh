@@ -66,24 +66,22 @@ else
   echo "[Step 03] Reusing previously completed alpha-Fe bulk pilot."
 fi
 
-echo "[Step 03] Prior 250–550 Ry sensitivity gate has been reviewed."
-for prior in outputs/fe_bulk_mesh_cutoff_summary.json outputs/fe_bulk_mesh_cutoff_report.txt; do
-  if [[ ! -s "$prior" ]]; then
-    echo "ERROR: prior validated MeshCutoff screening result missing: $prior" >&2
-    echo "Run the previous screening gate before this extension; no numerical result will be invented." >&2
+echo "[Step 03] Previous 550–850 Ry study completed and native FFT-grid diagnostic reviewed."
+for source in outputs/fe_bulk_mesh_cutoff_extension_summary.json outputs/fe_bulk_mesh_cutoff_extension_report.txt; do
+  if [[ ! -s "$source" ]]; then
+    echo "ERROR: reviewed extension output missing: $source" >&2
     exit 16
   fi
 done
-echo "[Step 03] Extended MeshCutoff screening: 550, 650, 750, 850 Ry."
-echo "[Step 03] Repeating 550 Ry to validate reproducibility against the prior run."
-echo "[Step 03] Two MPI ranks and one thread per rank by default; no slab DFT."
-"$PYTHON_BIN" scripts/07_fe_bulk_mesh_cutoff_extension.py 2>&1 | tee logs/07_fe_bulk_mesh_cutoff_extension.log
-
-for path in outputs/fe_bulk_mesh_cutoff_extension_summary.json outputs/fe_bulk_mesh_cutoff_extension_summary.csv outputs/fe_bulk_mesh_cutoff_extension_report.txt logs/07_fe_bulk_mesh_cutoff_extension.log; do
-  if [[ ! -s "$path" ]]; then
-    echo "ERROR: expected screening output missing or empty: $path" >&2
+echo "[Step 03] Screening distinct realized SIESTA grids: requests 850, 1000, 1250, 1500 Ry."
+echo "[Step 03] Repeating 850 Ry as a physical-grid reproducibility anchor."
+echo "[Step 03] MPI ranks: $SIESTA_MPI_RANKS, one OpenMP/BLAS thread per rank."
+"$PYTHON_BIN" scripts/08_fe_bulk_realized_grid_screen.py 2>&1 | tee logs/08_fe_bulk_realized_grid.log
+for output in outputs/fe_bulk_realized_grid_summary.json outputs/fe_bulk_realized_grid_summary.csv outputs/fe_bulk_realized_grid_report.txt logs/08_fe_bulk_realized_grid.log; do
+  if [[ ! -s "$output" ]]; then
+    echo "ERROR: requested grid-screening output missing or empty: $output" >&2
     exit 20
   fi
 done
-echo "[Step 03] Extended cutoff screening completed; no final numerical convergence was claimed."
-echo "[Step 03] Return extension summary JSON, extension report TXT and logs/07_fe_bulk_mesh_cutoff_extension.log."
+echo "[Step 03] Realized-grid screening complete. No final numerical convergence is claimed."
+echo "[Step 03] Send outputs/fe_bulk_realized_grid_summary.json, outputs/fe_bulk_realized_grid_report.txt and logs/08_fe_bulk_realized_grid.log."
