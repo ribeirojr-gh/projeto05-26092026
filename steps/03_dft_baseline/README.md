@@ -108,3 +108,46 @@ timestamped `pilot_failure.json` and SIESTA `.out` file (if present).
 Do not commit any MP API key, executable installations, or pseudopotential
 libraries. Send the summary, wrapper log, and the native SIESTA `.out` for
 review before any parameter sweep or surface DFT.
+
+## Current task: MeshCutoff-only Fe bulk screening
+
+The native `Fe_bulk_pilot.out` confirms that the spin-polarized pilot ended
+after 60 SCF iterations with total spin ~4.5722 μB for two Fe atoms;
+the total cell energy was −6888.008116 eV. The static pressure reported
+−105.6167 kbar at the fixed imported lattice. The pilot execution passed,
+but cutoff, basis, k-point and lattice convergence did not.
+
+Run **one new script** `scripts/06_fe_bulk_mesh_cutoff_screen.py` via
+the branch root `run.sh`, using the exact Fe PSML provenance of the pilot.
+The single changed parameter is SIESTA `MeshCutoff` over 250, 350, 450,
+and 550 Ry. Common settings: fixed validated two-atom alpha-Fe geometry,
+PBE, DZP, PAO energy shift 0.02 Ry, 6×6×6 k mesh, 300 K electronic
+temperature, +2.2 μB/Fe initial moments, SCF DM tolerance 1e−4,
+SCF max 120, mixing 0.05, two MPI ranks and one OpenMP thread per rank.
+Each point starts an independent SCF in a unique timestamped directory.
+
+The runner refreshes the Fe/O PSML preflight each time, reuses the validated
+Fe reference and pilot (or reconstructs those on a fresh clone if all
+prerequisites including MP_API_KEY are available), then runs the screening.
+Generated results stay untracked in `outputs/` and `logs/`.
+
+```bash
+cd ~/SIMULACOES/corrosao
+git status --short
+git fetch origin
+git switch step-03-dft-baseline
+git pull --ff-only origin step-03-dft-baseline
+SIESTA_PS_PATH="$HOME/Pacotes/PSEUDOS/DOJO-PSML" bash run.sh
+```
+
+Return `outputs/fe_bulk_mesh_cutoff_summary.json`,
+`outputs/fe_bulk_mesh_cutoff_report.txt`, and
+`logs/06_fe_bulk_mesh_cutoff.log`. If a point fails, also return the
+`screening_failure.json` from the timestamped run directory and the
+native SIESTA `.out` for that point, if present.
+
+All energies across the four points use **the same exact Fe pseudo** and
+the same fixed atomic geometry, so within-series differences are meaningful.
+Absolute energies must not be compared to different pseudopotential
+families. Differences relative to 550 Ry are a screening diagnostic only:
+**no converged cutoff is selected until after numerical review**.
