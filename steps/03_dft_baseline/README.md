@@ -68,3 +68,43 @@ Return `outputs/siesta_preflight.txt` and
 preflight does not prove SIESTA can read PSML at runtime, support a working
 MPI launch, or converge a spin-polarized Fe SCF. Those are the subsequent
 pilot/calibration gates.
+
+## Gate 3: first local ASE–SIESTA electronic-structure pilot
+
+The user's real PSML preflight passed: SIESTA 5.4.2 (MPI), ASE 3.29.0,
+Fe.psml and O.psml both scalar-relativistic PBE; Fe has 16 valence electrons
+including 3s/3p semicore. The exact local SHA-256 fingerprints are held in
+`outputs/siesta_preflight.json` and checked again before the pilot.
+
+Run from the repository root (only after reviewing local changes):
+
+```bash
+git fetch origin
+git switch step-03-dft-baseline
+git pull --ff-only origin step-03-dft-baseline
+SIESTA_PS_PATH="$HOME/Pacotes/PSEUDOS/DOJO-PSML" bash run.sh
+```
+
+The runner reuses an existing validated `outputs/POSCAR_Fe_bulk`, or attempts
+to reconstruct it from Materials Project when `MP_API_KEY` and the previous
+Step 02 dependencies are available. It checks the preflight, then launches
+ONE fixed-cell/fixed-position PBE/DZP spin-polarized bcc Fe test through ASE.
+Default MPI ranks = 2, with OpenMP/BLAS threads = 1. The Fe initial moments
+are +2.2 Bohr magnetons per atom. Pilot-only settings: 250 Ry mesh cutoff,
+0.02 Ry PAO energy shift, 6×6×6 k-points, 300 K Fermi-Dirac electronic
+temperature, DM tolerance 1e-4, mixing weight 0.05, 120 SCF iterations.
+
+This is explicitly NOT a proof of numerical convergence, equilibrium
+magnetization, optimized lattice, or a converged slab. A finite ASE energy
+only establishes that this pilot calculation could be executed and parsed.
+Output diagnostic spin-moment lines are retained for independent review.
+
+Each run writes into a unique timestamped subdirectory under
+`outputs/dft/fe_bulk_siesta_pilot/` to prevent accidental overwrites.
+The run summary is `outputs/fe_bulk_siesta_pilot_summary.json`; the wrapper
+log is `logs/05_siesta_fe_bulk_pilot.log`. If the pilot fails, collect the
+timestamped `pilot_failure.json` and SIESTA `.out` file (if present).
+
+Do not commit any MP API key, executable installations, or pseudopotential
+libraries. Send the summary, wrapper log, and the native SIESTA `.out` for
+review before any parameter sweep or surface DFT.
