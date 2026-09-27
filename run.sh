@@ -45,8 +45,8 @@ if [[ ! -s outputs/POSCAR_Fe_bulk || ! -s outputs/Fe_bulk_metadata.json ]]; then
     echo "ERROR: validated bulk Fe prerequisite missing; export MP_API_KEY for Materials Project retrieval." >&2
     exit 13
   fi
-  if ! "$PYTHON_BIN" -c "import mp_api, pymatgen, ase" >/dev/null 2>&1; then
-    if [[ ! -x .venv-step02/bin/python ]] || ! .venv-step02/bin/python -c "import mp_api, pymatgen, ase" >/dev/null 2>&1; then
+  if ! "$PYTHON_BIN" -c "from mp_api.client import MPRester; import pymatgen.core, ase" >/dev/null 2>&1; then
+    if [[ ! -x .venv-step02/bin/python ]] || ! .venv-step02/bin/python -c "from mp_api.client import MPRester; import pymatgen.core, ase" >/dev/null 2>&1; then
       python3 -m venv .venv-step02
       .venv-step02/bin/python -m pip install --upgrade pip setuptools wheel
       .venv-step02/bin/python -m pip install -r requirements-step02.txt
